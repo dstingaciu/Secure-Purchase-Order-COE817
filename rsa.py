@@ -4,7 +4,7 @@ from Crypto.Signature import pkcs1_15
 from Crypto.Hash import SHA256
 
 
-class rsaEx():
+class rsaKeyServer():
     """ 
     Init function
             initializes rsa key using RSA.generate and PKCS1 RSA encryption

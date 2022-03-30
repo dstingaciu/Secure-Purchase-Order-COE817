@@ -1,128 +1,102 @@
+import random
 import uuid
 from Crypto.Util.Padding import pad, unpad
-from Crypto.Cipher import PKCS1_v1_5, DES
+from Crypto.Cipher import PKCS1_v1_5
 from Crypto.PublicKey import RSA
 from Crypto.Hash import SHA
-from datetime import datetime
-from rsa import rsaEx
+from rsa import rsaKeyServer
 import socket
-"""
-Global Variables
+import time
 
-Variables for standard deliminator
+"""Helper Functions"""
 
-DELIM           : Delimiator between message/data and packet #
-time_format     : standard time format
-s               : socket variable used for communication with responder/server
+# Returns current time in milliseconds from epoch (INT)
+def returnCurrentTime():
+    return int(time.time_ns() / 1000)
 
-session_key_str : binary string containing session key using DES sencryption to encrypt/decrypt session data
+# Verifies incoming timestamps are within 10 seconds
+def timestampGate(ts, s):
+    if(returnCurrentTime() - ts > 10000 or s is None):
+            s.send("Timed out!")
+            s.close()
+            exit(-1)
 
-s_key           : DES class key initialized using session_key_str
+# Inititate Private and public RSA key
+user_public_key = rsaKeyServer()
 
-IDa             : ID of initiator/client
-"""
+my_email = "dstingaciu@ryerson.ca"
 
-DELIM = ";==;"
-time_format = "%m/%d/%Y;%H:%M:%S"
+delim = ";==;"
+class key_exchange_with_org_key_server:
+    def __init__(self):
+        self.s = socket.socket()
+        self.ksPort = 60000
+        self.orgServer = "127.0.0.1"
 
-rsa = rsaEx() # Initiate our RSA key and cipher
-pubA_key = rsa.key.public_key().export_key() # PubB
+    def initConnection(self):
+        # Initiate connection to org key server
+        self.s.connect((self.orgServer, self.ksPort))
 
-session_key_str = b"RYERSON "
+        # Receive public key string and org name
+        orgPubStr, orgName = self.s.recv(1024).decode().split(delim)
+        print("Welcome to " + orgName)
 
-s_key = DES.new(session_key_str, DES.MODE_ECB) # init session key
+        # Convert public key string to usable public key
+        self.orgPub = PKCS1_v1_5.new(RSA.import_key(orgPubStr))
 
-s = socket.socket()             # Create a socket object
-port = 60000                    # Reserve a port for your service.
+        # Prepare client key string and TS response
+        clientPubKeyStr = user_public_key.key.public_key().export_key().decode()
+        firstClientResponse = f"{clientPubKeyStr}{delim}{returnCurrentTime()}".encode()
 
-IDa = b"INITIATOR A"
+        # Send client key
+        self.s.send(firstClientResponse)
+        
+        self.beginKeyExchangeVerification()
 
-def encrypt(Plaintext_pad, key):
-    if(isinstance(Plaintext_pad, str)):
-        byteEncodedMessage = str.encode(Plaintext_pad) # Encode message in base 64
-    else:
-        byteEncodedMessage = Plaintext_pad
-    return key.encrypt(pad(byteEncodedMessage, 8)) # Encrypt message using given key
+    def beginKeyExchangeVerification(self):
+        # Generate random N1
+        N1 = uuid.uuid4().hex
 
-def decrypt(ciphertext, key):
-    return key.decrypt(ciphertext)
+        # Prepare N1 Str and encrypt with org public key
+        N1Str = f"{N1}{delim}{returnCurrentTime()}"
+        N1_enc = self.orgPub.encrypt(str.encode(N1Str))
 
-# Initiates connection to server on a given port and handshake for session key
-def initConnection():
-    print("Initiating connection to server...")
+        # Send encrypted N1 Str
+        self.s.send(N1_enc)
 
-    # INITIATE CONNECTION TO SERVER
-    s.connect(('127.0.0.1', port))
-    print("Connection initiated!")
-    # == EXCHANGE KEYS == #
+        # Receive N1, N2, TS Str and split message
+        N1N2_enc = self.s.recv(2048)
+        N1_check, N2, TS = user_public_key.decryptMessage(N1N2_enc).split(delim)
 
-    # SEND PUB A KEY TO SERVER
-    print("Sending PUB A: ", pubA_key)
-    s.send(pubA_key)
+        # Check N1
+        if(N1_check != N1):
+            self.s.send("N1 unverified, closing socket!")
+            self.s.close()
+            return
 
-    # AWAIT ENCRYPTED PUB B KEY
-    pubB_key = s.recv(1024)
-    print("Received PUB B: ", pubB_key)
-    # ==================== #
+        # Verify time stamp is within 10 seconds
+        timestampGate(int(TS), self.s)
 
-    # == GENERATE N1 STRING AND SEND IT TO SERVER ENCRYPTED USING PUB B == #
-    N1 = uuid.uuid4().hex # Generate Nonce 1
-    print("N1 generated: ", N1)
-    rsaB = RSA.import_key(pubB_key) # import key
-    keyExCipher = PKCS1_v1_5.new(rsaB) # create cipher
+        # Prepare N2 string
+        N2Str = f"{N2}{delim}{returnCurrentTime()}"
 
-    nonceIdStr = f"{N1}||{IDa}" # Create N1 Str
-    print("Sending N1 with ID: ",nonceIdStr)
-    encryptedInitStr = keyExCipher.encrypt(str.encode(nonceIdStr)) # Encrypt N1 Str with Pub B key
+        # Send N2 String
+        self.s.send(self.orgPub.encrypt(str.encode(N2Str)))
+        
+        self.sendUserEmailToKs()
 
-    s.send(encryptedInitStr) # Send
+    def sendUserEmailToKs(self):
+        # Setup email string
+        email_str = f"{my_email}{delim}{returnCurrentTime()}"
+        self.s.send(self.orgPub.encrypt(str.encode(email_str)))
 
-    # =================================================================== #
+        ack_enc = self.s.recv(1024)
+        ack_str = user_public_key.decryptMessage(ack_enc)
+        
+        if(ack_str.strip() == "added"):
+            print("Added session key!")
 
-    # Recieve and Decrypt N1 || N2 Str
-    encNonceOneTwoStr = s.recv(1024)
-    decNonceOneTwoStr = rsa.decryptMessage(encNonceOneTwoStr).split("||")
-    print("Received N1||N2 String (Encrypted): ", encNonceOneTwoStr)
-    print("Received N1||N2 String (Decrypted): ",decNonceOneTwoStr)
+        self.s.close()
 
-    # Extract N1 and N2
-    recN1 = decNonceOneTwoStr[0]
-    N2 = decNonceOneTwoStr[1]
-
-    # If mismatch, end connection and exit program
-    print("Verifying N1...")
-    if(recN1 != N1):
-        print("Error establishing secure connection to server, N1 != N2")
-        s.close()
-        exit(-1)
-    print("Verified!")
-    # Encrypt received N2 and send for verification
-    verifyN2 = keyExCipher.encrypt(str.encode(N2))
-    print("Sending back N2 for verification: ", N2)
-    s.send(verifyN2)
-
-    encACK = s.recv(1024)
-    decACK = rsa.decryptMessage(encACK).split("||")
-    print("Received N2 ACK (Encrypted): ",encACK)
-    print("Received N2 ACK (Decrypted): ",decACK)
-
-    if(decACK[0] != "ACK" or decACK[1] != N2):
-        print("Error establishing secure connection to server, N2 mismatch on ACK")
-        s.close()
-        exit(-1)
-    
-    print("Beginning session key sending process")
-    #encSKeyStr = rsa.encryptMessage(session_key_str.decode()) # Encrypt Session key using PR Ap
-    signedSKey, digest = rsa.signMessage(session_key_str)
-    encSessionKey = keyExCipher.encrypt(session_key_str)
-    print("Sending signature of session key string using Pub A and session key string: ")
-    print("Signed session key string: ",signedSKey)
-    print("Session Key string: ", session_key_str)
-    packet = signedSKey + "||".encode() + encSessionKey
-
-    s.send(packet)
-
-    sKeyACK = s.recv(1024)
-    decSKeyAck = decrypt(sKeyACK, s_key).decode()
-    print("GOT ACK ", decSKeyAck)
-    return True
+ks_ex = key_exchange_with_org_key_server()
+ks_ex.initConnection()
