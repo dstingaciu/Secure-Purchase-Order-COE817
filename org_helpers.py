@@ -144,4 +144,24 @@ def retrievePurchaseOrder():
         return None
 
 def fulfillPurchaseOrder(pon):
-    return True
+    po_table_value = (pon)
+    try:
+        # Connect to DB
+        con = sqlite3.connect("org.db")
+
+        # Prepare update statement
+        con.execute("""
+            UPDATE purchase_orders
+            SET fulfilled = 1
+            WHERE pon = ?
+        """, po_table_value)
+
+        # Commit statement
+        con.commit()
+
+        # Close DB Connection
+        con.close()
+        return True
+    except Exception as ex:
+        print("Error connecting to db...")
+        return None

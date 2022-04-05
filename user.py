@@ -7,6 +7,8 @@ from Crypto.Hash import SHA
 from rsa import rsaKeyServer
 import socket
 import time
+import json
+from send_email import send_email
 
 """Helper Functions"""
 
@@ -24,7 +26,7 @@ def timestampGate(ts, s):
 # Inititate Private and public RSA key
 user_public_key = rsaKeyServer()
 
-my_email = "dstingaciu@ryerson.ca"
+my_email = "coe817finalproject@gmail.com"
 
 delim = ";==;"
 class key_exchange_with_org_key_server:
@@ -91,6 +93,7 @@ class key_exchange_with_org_key_server:
         self.s.send(self.orgPub.encrypt(str.encode(email_str)))
 
         ack_enc = self.s.recv(1024)
+        print(ack_enc)
         ack_str = user_public_key.decryptMessage(ack_enc)
         
         if(ack_str.strip() == "added"):
@@ -98,5 +101,64 @@ class key_exchange_with_org_key_server:
 
         self.s.close()
 
+    def getOrgPublicKey(self):
+        return self.orgPub
+
+"""
+Class for asking user what they wish to order and then signing and hashing order
+"""
+class itemUICLI:
+    def __init__(self, kskey):
+        self.purchaseOrder = []
+        self.kskey = kskey
+
+    # UI for the user to see what items they wish to order
+    def uiFlow(self):
+        doneOrdering = 0
+        
+        while(doneOrdering == 0):
+            # Prompt user for an item number from catalog
+            print("Enter an item number (enter -1 to finish adding items): ")
+            itemNum = input()
+
+            # Check if we should be done ordering
+            if(itemNum == "-1"):
+                doneOrdering = 1
+            else:
+                # Prompt user for quantity of item to purchase
+                print("How much of "+ itemNum + " would you like to purchase? (enter -1 to cancel this item): ")
+                quantity = input()
+                self.purchaseOrder.append({"ItemNum": itemNum, "quantity": quantity})
+                print("Added "+quantity+ " of " + itemNum)
+            
+            print("\n")
+
+        self.hashPurchaseObject()
+
+    def hashPurchaseObject(self):
+        # Generate JSON string from array of purchases
+        orderString = json.dumps(self.purchaseOrder)
+        
+        # Get time stamp
+        timestamp = returnCurrentTime()
+
+        # Combine JSON string and timestamp
+        dec_orderString = f"{orderString}{delim}{timestamp}"
+
+        # Generate signed order hash from JSON String + timestamp
+        signedOrderHash, signedOrderDigest = user_public_key.signMessage(str.encode(dec_orderString))
+
+        # Encrypt JSON string + timestamp
+        enc_orderString = self.kskey.encrypt(str.encode(dec_orderString))
+
+        send_email(f"{signedOrderHash}{delim}{enc_orderString}")
+
+    def returnPO(self):
+        return self.purchaseOrder
+
+
 ks_ex = key_exchange_with_org_key_server()
 ks_ex.initConnection()
+
+cli = itemUICLI(ks_ex.getOrgPublicKey())
+cli.uiFlow()
