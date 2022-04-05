@@ -32,7 +32,7 @@ class Supervisor():
 
     def retrieveOrders(self):
         orderTuple = retrievePurchaseOrder()
-        if(orderTuple.length > 0):
+        if(len(orderTuple) > 0):
             pon, email, PO, u_sig, s_sig, fulfilled, sec_flag, sid = orderTuple[0]
             print("Here's the latest order: ")
             print(PO)
@@ -86,7 +86,7 @@ class deptEmployee():
 
     def retrieveOrders(self):
         orderTuple = retrieveSignedUnfulfilledPurchaseOrder()
-        if(orderTuple.length > 0):
+        if(len(orderTuple) > 0):
             pon, email, PO, u_sig, s_sig, fulfilled, sec_flag, sid = orderTuple[0]
 
             print("Here's the latest order: ")
