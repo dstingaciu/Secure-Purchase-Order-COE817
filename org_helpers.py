@@ -142,3 +142,6 @@ def retrievePurchaseOrder():
     except:
         print("Error connecting to db...")
         return None
+
+def fulfillPurchaseOrder(pon):
+    return True
