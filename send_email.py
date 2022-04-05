@@ -2,11 +2,11 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-gmail_user = 'coe817finalproject@gmail.com'
-gmail_password = 'Test#2022'
+#gmail_user = 'coe817finalproject@gmail.com'
+#gmail_password = 'Test#2022'
 to = 'coe817finalproject2@gmail.com'
 
-def send_email(body: str):
+def send_email(body: str, gmail_user, gmail_password):
     print(type(body))
     subject = 'Order'
 

@@ -1,9 +1,6 @@
-import random
 import uuid
-from Crypto.Util.Padding import pad, unpad
 from Crypto.Cipher import PKCS1_v1_5
 from Crypto.PublicKey import RSA
-from Crypto.Hash import SHA
 from rsa import rsaKeyServer
 import socket
 import time
@@ -12,16 +9,7 @@ from send_email import send_email
 
 """Helper Functions"""
 
-# Returns current time in milliseconds from epoch (INT)
-def returnCurrentTime():
-    return int(time.time_ns() / 1000)
 
-# Verifies incoming timestamps are within 10 seconds
-def timestampGate(ts, s):
-    if(returnCurrentTime() - ts > 10000 or s is None):
-            s.send("Timed out!")
-            s.close()
-            exit(-1)
 
 # Inititate Private and public RSA key
 user_public_key = rsaKeyServer()
@@ -30,10 +18,11 @@ my_email = "coe817finalproject@gmail.com"
 
 delim = ";==;"
 class key_exchange_with_org_key_server:
-    def __init__(self):
+    def __init__(self, email):
         self.s = socket.socket()
         self.ksPort = 60000
         self.orgServer = "127.0.0.1"
+        self.email = email
 
     def initConnection(self):
         # Initiate connection to org key server
@@ -48,7 +37,7 @@ class key_exchange_with_org_key_server:
 
         # Prepare client key string and TS response
         clientPubKeyStr = user_public_key.key.public_key().export_key().decode()
-        firstClientResponse = f"{clientPubKeyStr}{delim}{returnCurrentTime()}".encode()
+        firstClientResponse = f"{clientPubKeyStr}{delim}{self.__returnCurrentTime()}".encode()
 
         # Send client key
         self.s.send(firstClientResponse)
@@ -58,9 +47,9 @@ class key_exchange_with_org_key_server:
     def beginKeyExchangeVerification(self):
         # Generate random N1
         N1 = uuid.uuid4().hex
-
+        print(self.__returnCurrentTime())
         # Prepare N1 Str and encrypt with org public key
-        N1Str = f"{N1}{delim}{returnCurrentTime()}"
+        N1Str = f"{N1}{delim}{self.__returnCurrentTime()}"
         N1_enc = self.orgPub.encrypt(str.encode(N1Str))
 
         # Send encrypted N1 Str
@@ -77,10 +66,10 @@ class key_exchange_with_org_key_server:
             return
 
         # Verify time stamp is within 10 seconds
-        timestampGate(int(TS), self.s)
+        self.__timestampGate(int(TS), self.s)
 
         # Prepare N2 string
-        N2Str = f"{N2}{delim}{returnCurrentTime()}"
+        N2Str = f"{N2}{delim}{self.__returnCurrentTime()}"
 
         # Send N2 String
         self.s.send(self.orgPub.encrypt(str.encode(N2Str)))
@@ -89,7 +78,7 @@ class key_exchange_with_org_key_server:
 
     def sendUserEmailToKs(self):
         # Setup email string
-        email_str = f"{my_email}{delim}{returnCurrentTime()}"
+        email_str = f"{self.email}{delim}{self.__returnCurrentTime()}"
         self.s.send(self.orgPub.encrypt(str.encode(email_str)))
 
         ack_enc = self.s.recv(1024)
@@ -104,13 +93,26 @@ class key_exchange_with_org_key_server:
     def getOrgPublicKey(self):
         return self.orgPub
 
+    # Returns current time in milliseconds from epoch (INT)
+    def __returnCurrentTime(self):
+        return int(time.time_ns() / 1000)
+
+    # Verifies incoming timestamps are within 10 seconds
+    def __timestampGate(self,ts, s):
+        if(self.__returnCurrentTime() - ts > 60000 or s is None):
+                s.send(b"Timed out!")
+                s.close()
+                exit(-1)
+
 """
 Class for asking user what they wish to order and then signing and hashing order
 """
 class itemUICLI:
-    def __init__(self, kskey):
+    def __init__(self, kskey, email, password):
         self.purchaseOrder = []
         self.kskey = kskey
+        self.email = email
+        self.password = password
 
     # UI for the user to see what items they wish to order
     def uiFlow(self):
@@ -140,7 +142,7 @@ class itemUICLI:
         orderString = json.dumps(self.purchaseOrder)
         
         # Get time stamp
-        timestamp = returnCurrentTime()
+        timestamp = int(time.time_ns() / 1000)
 
         # Combine JSON string and timestamp
         dec_orderString = f"{orderString}{delim}{timestamp}"
@@ -151,14 +153,23 @@ class itemUICLI:
         # Encrypt JSON string + timestamp
         enc_orderString = self.kskey.encrypt(str.encode(dec_orderString))
 
-        send_email(f"{signedOrderHash}{delim}{enc_orderString}")
+        print(type(signedOrderHash))
+        print(dec_orderString)
+
+        send_email(f"{signedOrderHash}{delim}{enc_orderString}", self.email, self.password)
 
     def returnPO(self):
         return self.purchaseOrder
 
 
-ks_ex = key_exchange_with_org_key_server()
+print("Please enter your email: ")
+usrEmail = input()
+
+ks_ex = key_exchange_with_org_key_server(usrEmail)
 ks_ex.initConnection()
 
-cli = itemUICLI(ks_ex.getOrgPublicKey())
+print("Please enter your password to email this purchase order: ")
+usrPass = input()
+
+cli = itemUICLI(ks_ex.getOrgPublicKey(),usrEmail, usrPass)
 cli.uiFlow()

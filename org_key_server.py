@@ -1,36 +1,25 @@
 from rsa import rsaKeyServer
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_v1_5
-import socket
 import time
 import uuid
 import multiprocessing as mp
 import org_helpers
+import socket
 
 org_name = "Bueno, Damas & Stingaciu Fulfillment Co."
 
 """Helper Functions"""
-
-# Returns current time in milliseconds from epoch (INT)
-def returnCurrentTime():
-    return int(time.time_ns() / 1000)
-
-# Verifies incoming timestamps are within 10 seconds
-def timestampGate(ts, s):
-    if(returnCurrentTime() - ts > 10000 or s is None):
-            s.send("Timed out!")
-            s.close()
-            exit(-1)
-
 delim = ";==;"
 
 class key_server:
-    def __init__(self, s):
-        self.rsaOrg = rsaKeyServer() # Init RSA Class to generate key
-        self.s = s
+    def __init__(self, rsaObj):
+        self.rsaOrg = rsaObj# Init RSA Class to generate key
         
+    def initConnection(self, s):
+        # Get socket
+        self.s = s
 
-    def initConnection(self):
         # Send public key from current private key instance
         pubKeyStr = self.rsaOrg.key.public_key().export_key().decode()
         firstResponse = f"{pubKeyStr}{delim}{org_name}".encode()
@@ -40,7 +29,7 @@ class key_server:
         pubClient_str, ts = self.s.recv(1024).decode().split(delim)
 
         # Verify time stamp is within 10 seconds
-        timestampGate(int(ts), self.s)
+        self.__timestampGate(int(ts), self.s)
 
         # Import client public key
         self.pubClientStr = pubClient_str
@@ -56,13 +45,13 @@ class key_server:
         N1, ts = self.rsaOrg.decryptMessage(N1_enc).split(delim)
         ts = int(ts)
 
-        timestampGate(ts, self.s) # Verify time stamp is within 10 seconds
+        self.__timestampGate(ts, self.s) # Verify time stamp is within 10 seconds
 
         # Generate N2
         N2 = uuid.uuid4().hex
 
         # Prepare N1, N2, TS string
-        N1N2_str = f"{N1}{delim}{N2}{delim}{returnCurrentTime()}"
+        N1N2_str = f"{N1}{delim}{N2}{delim}{self.__returnCurrentTime()}"
 
         # Send encrypted N1, N2, TS string
         self.s.send(self.pubClient.encrypt(str.encode(N1N2_str)))
@@ -74,10 +63,10 @@ class key_server:
         if(N2_check != N2):
             self.s.send("N2 unverified, closing socket!")
             self.s.close()
-            exit(-1)
+            return False
 
         # Verifty time stamp is within 10 seconds
-        timestampGate(int(ts), self.s)
+        self.__timestampGate(int(ts), self.s)
 
         # Go to email retreieval step
         self.retrieveEmail()
@@ -87,32 +76,30 @@ class key_server:
         email_enc = self.s.recv(1024)
         email, ts = self.rsaOrg.decryptMessage(email_enc).split(delim)
 
-        timestampGate(int(ts), self.s)
+        self.__timestampGate(int(ts), self.s)
         
         self.s.send(self.pubClient.encrypt(str.encode("added")))
 
         self.s.close()
         if(org_helpers.addToSessionKeys(email, self.pubClientStr)):
-            exit(1)
+            return True
         else:
-            exit(-1)
+            return False
 
-def beginKeyServerSession(s):
-    ks = key_server(s)
-    ks.initConnection()
+    def retrieveKey(self):
+        return self.rsaOrg
 
-# Setup connection socket
-s = socket.socket()
-port = 60000
-host = socket.gethostname()
-s.bind(('127.0.0.1', port))     # Bind to the port
-s.listen(5)                     # Now wait for client connection
+    # Returns current time in milliseconds from epoch (INT)
+    def __returnCurrentTime(self):
+        return int(time.time_ns() / 1000)
 
-print("await connection from client...")
-# Await connection from a client
-conn, addr = s.accept()
+    # Verifies incoming timestamps are within 60 seconds
+    def __timestampGate(self,ts, s):
+        if(self.__returnCurrentTime() - ts > 60000 or s is None):
+                s.send(b"Timed out!")
+                s.close()
+                return False
 
-beginKeyServerSession(conn)
 
 
 

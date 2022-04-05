@@ -44,8 +44,9 @@ def retrieveStoredSessionKey(email):
 
         # Return array with all session keys
         return rVal
-    except:
+    except Exception as ex:
         print("Error connecting to db...")
+        print(ex)
         return None
 
 # Delete Session key with session key
@@ -100,6 +101,7 @@ def deleteFromSessionKeyWitEmail(email):
 # Adds session keys to the database
 def addToPurchaseOrderFromClient(email, PO_str, user_sig):
     po_table_values = (email, PO_str, user_sig)
+    print(po_table_values)
     try:
         # Connect to DB
         con = sqlite3.connect("org.db")

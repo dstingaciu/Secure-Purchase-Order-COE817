@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import imaplib
 import email
-from email.header import decode_header
 
 
 # account credentials
@@ -27,6 +26,7 @@ def accessEmail():
 
     email_message = email.message_from_string(raw_email_string)
 
+    fromEmail = email_message['From']
     body = ""
 
     for part in email_message.walk():
@@ -39,4 +39,4 @@ def accessEmail():
     imap.close()
     imap.logout()
 
-    return body
+    return (fromEmail, body)
