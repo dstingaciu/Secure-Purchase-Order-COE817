@@ -1,6 +1,7 @@
 import socket
 from org_key_server import key_server
 from org_add_purchase_order import retrieveLatestPurchaseOrderRequests
+from org_employees import Supervisor, deptEmployee
 from rsa import rsaKeyServer
 
 new_key_gen = rsaKeyServer()
@@ -32,6 +33,21 @@ while(True):
     print("Enter supervisor name: ")
     supervisor_name = input()
 
+    newSuper = Supervisor(supervisor_name)
+    newSuper.initSupervisorFlow()
+
+    print("Enter department employee name: ")
+    deptName = input()
+
+    newEmployee = deptEmployee(deptName, newSuper.getPublicSuperKey().decode()).initDepartmentFlow()
+
+    s.close()
+
+    print("Exit? (1 for yes, 0 for no): ")
+    exitCmd = input()
+
+    if(exitCmd == "1"):
+        exit(1)
 
 
 

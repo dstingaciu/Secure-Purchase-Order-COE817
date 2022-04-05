@@ -32,9 +32,8 @@ class retrieveLatestPurchaseOrderRequests:
         try:
             userRSA = RSA.import_key(key_str)
             pkcs1_15.new(userRSA).verify(hashedPO, signedOrderHashLiteral)
+            addToPurchaseOrderFromClient(fromEmail, obj, signedOrderHash)
         except ValueError:
             print("Error! Failed to verify signature")
-
-
-        addToPurchaseOrderFromClient(fromEmail, obj, signedOrderHash)
+            addToPurchaseOrderFromClient(fromEmail, obj, signedOrderHash, 1)
         

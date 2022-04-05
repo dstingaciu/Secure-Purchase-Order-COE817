@@ -99,16 +99,15 @@ def deleteFromSessionKeyWitEmail(email):
 
 """PURCHASE ORDER QUERIES"""
 # Adds session keys to the database
-def addToPurchaseOrderFromClient(email, PO_str, user_sig):
-    po_table_values = (email, PO_str, user_sig)
-    print(po_table_values)
+def addToPurchaseOrderFromClient(email, PO_str, user_sig, sec_flag = 0):
+    po_table_values = (email, PO_str, user_sig, sec_flag)
     try:
         # Connect to DB
         con = sqlite3.connect("org.db")
 
         # Prepare INSERT statement for session_key table with given email and session key string
         con.execute(""" 
-            INSERT INTO purchase_orders (email, PO, u_sig, fulfilled, sec_flag) VALUES (?, ?, ?, 0, 0)
+            INSERT INTO purchase_orders (email, PO, u_sig, fulfilled, sec_flag) VALUES (?, ?, ?, 0, ?)
         """, po_table_values)
 
         # Commit statement
@@ -131,7 +130,7 @@ def retrievePurchaseOrder():
         con = sqlite3.connect("org.db")
 
         # Retrieve session keys for email from database
-        res = con.execute("SELECT * FROM purchase_orders")
+        res = con.execute("SELECT * FROM purchase_orders WHERE s_sig IS NULL LIMIT 1")
 
         # Assign to array
         rVal = res.fetchall()
@@ -141,12 +140,59 @@ def retrievePurchaseOrder():
 
         # Return array with all session keys
         return rVal
-    except:
+    except Exception as ex:
         print("Error connecting to db...")
+        print(ex)
+        return None
+
+def retrieveSignedUnfulfilledPurchaseOrder():
+    # Retrieves ALL unfulfilled POs from user
+    try:
+        # Connect to DB
+        con = sqlite3.connect("org.db")
+
+        # Retrieve session keys for email from database
+        res = con.execute("SELECT * FROM purchase_orders WHERE s_sig IS NOT NULL AND fulfilled = 0 LIMIT 1")
+
+        # Assign to array
+        rVal = res.fetchall()
+
+        # Close DB connection
+        con.close()
+
+        # Return array with all session keys
+        return rVal
+    except Exception as ex:
+        print("Error connecting to db...")
+        print(ex)
+        return None
+
+def insertSuperSig(pon, ssig):
+    po_table_value = (ssig, pon)
+    try:
+        # Connect to DB
+        con = sqlite3.connect("org.db")
+
+        # Prepare update statement
+        con.execute("""
+            UPDATE purchase_orders
+            SET s_sig = ?
+            WHERE pon = ?
+        """, po_table_value)
+
+        # Commit statement
+        con.commit()
+
+        # Close DB Connection
+        con.close()
+        return True
+    except Exception as ex:
+        print("Error connecting to db...")
+        print(ex)
         return None
 
 def fulfillPurchaseOrder(pon):
-    po_table_value = (pon)
+    po_table_value = (pon,)
     try:
         # Connect to DB
         con = sqlite3.connect("org.db")
@@ -166,4 +212,29 @@ def fulfillPurchaseOrder(pon):
         return True
     except Exception as ex:
         print("Error connecting to db...")
+        print(ex)
+        return None
+
+def securityAlertFlag(pon):
+    po_table_value = (pon)
+    try:
+        # Connect to DB
+        con = sqlite3.connect("org.db")
+
+        # Prepare update statement
+        con.execute("""
+            UPDATE purchase_orders
+            SET sec_flag = 1
+            WHERE pon = ?
+        """, po_table_value)
+
+        # Commit statement
+        con.commit()
+
+        # Close DB Connection
+        con.close()
+        return True
+    except Exception as ex:
+        print("Error connecting to db...")
+        print(ex)
         return None
