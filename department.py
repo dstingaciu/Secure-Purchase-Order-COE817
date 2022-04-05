@@ -27,20 +27,29 @@ Created on Mon Apr  4 23:27:46 2022
 from Crypto.Signature import pkcs1_15
 from Crypto.Cipher import PKCS1_v1_5, DES
 import rsa
+from rsa import rsaKeyServer
 
 def depart():
-     
-    # var1 = rsa.
-    # var2 = rsa.signMessage()
-    # print(var2)
+    
+    # Inititate Private and public RSA key
+    user_public_key = rsaKeyServer()
+    clientPubKeyStr = user_public_key.key.public_key().export_key().decode()
+    
+    pubA_key = conn.recv(1024) # Get pubA key
+    print("Received PUB A from initiator A: ", pubA_key)
+    rsaA = RSA.import_key(pubA_key) # import key
+    
+    s_key_str = rsa.decryptMessage(encSessionKey).encode()
+    s_key_hash = SHA256.new(s_key_str)    
 
     print("Verifying signature...")
     try:
             #get the user key              create private cipher
-        pkcs1_15.new(rsa.self.key).verify(rsa.messageHash, rsa.self.privateCipher.sign(messageHash))
+        pkcs1_15.new(rsaA).verify(s_key_hash, signedSKey)
+        #pkcs1_15.new(rsa.self.key).verify(rsa.messageHash, rsa.self.privateCipher.sign(messageHash))
     except ValueError:
         print("Error! Failed to verify signature")
-        #conn.close()
+        conn.close()
         return
     
     print("Signature verified, initating session key ")
